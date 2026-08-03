@@ -262,7 +262,7 @@ Ensure that both the **ESP32 robot** and the **computer running the navigation s
 Execute the main navigation program:
 
 ```bash
-python src/Robot.py
+python Robot.py
 ```
 
 The software will:
