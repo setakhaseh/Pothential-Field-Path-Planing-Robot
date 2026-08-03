@@ -1,4 +1,4 @@
-Hybrid Autonomous Navigation for Differential Drive Robots
+# Hybrid Autonomous Navigation for Differential Drive Robots
 
 > A hybrid behavior-based navigation framework that combines **Frenet Path Planning**, **Artificial Potential Field (APF)**, and a **Finite State Machine (FSM)** for real-time autonomous navigation of a differential-drive mobile robot.
 
@@ -11,12 +11,11 @@ Hybrid Autonomous Navigation for Differential Drive Robots
 
 # Demo
 
-> **Demo video**
+<p align="center">
+<img src="Demo/Demo5.gif" width="800"/>
+</p>
 
-```
-Demo/
-└── Demo5.mp4
-
+---
 
 # Overview
 
