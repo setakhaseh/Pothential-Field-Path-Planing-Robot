@@ -1,133 +1,180 @@
+<div align="center">
+
 # Hybrid Autonomous Navigation for Differential Drive Robots
 
-> A hybrid behavior-based navigation framework that combines **Frenet Path Planning**, **Artificial Potential Field (APF)**, and a **Finite State Machine (FSM)** for real-time autonomous navigation of a differential-drive mobile robot.
+### A Hybrid Navigation Framework Combining Frenet Path Planning, Artificial Potential Field, and Finite State Machine
 
 ![Python](https://img.shields.io/badge/Python-3.x-blue)
-![OpenCV](https://img.shields.io/badge/OpenCV-Computer%20Vision-green)
-![ESP32](https://img.shields.io/badge/ESP32-Robot-orange)
-![License](https://img.shields.io/badge/License-MIT-red)
+![OpenCV](https://img.shields.io/badge/OpenCV-4.x-green)
+![ESP32](https://img.shields.io/badge/ESP32-orange)
+![WebSocket](https://img.shields.io/badge/WebSocket-RealTime-red)
+![License](https://img.shields.io/badge/License-MIT-lightgrey)
+
+</div>
 
 ---
 
 # Demo
 
 <p align="center">
-<img src="Demo/Demo5.gif" width="800"/>
+<a href="Demo/Demo5.mp4">
+<img src="Demo/Demo5.gif" width="900">
+</a>
+</p>
+
+<p align="center">
+<b>Click the animation to watch the full-resolution demonstration video.</b>
 </p>
 
 ---
 
 # Overview
 
-This project presents a hybrid autonomous navigation framework designed for a differential-drive mobile robot operating in a structured indoor environment.
+This project presents a **hybrid autonomous navigation framework** for a differential-drive mobile robot operating in a structured indoor environment.
 
-Unlike conventional navigation systems that rely on a single path planning strategy, this project combines three complementary approaches:
+Instead of relying on a single navigation strategy, the proposed framework combines three complementary approaches:
 
-- **Frenet Coordinate Framework** for trajectory tracking.
+- **Frenet Coordinate Framework** for smooth trajectory tracking.
 - **Artificial Potential Field (APF)** for local obstacle avoidance.
-- **Finite State Machine (FSM)** for high-level behavior selection.
+- **Finite State Machine (FSM)** for behavior selection and decision making.
 
-The proposed architecture enables the robot to navigate efficiently while adapting its behavior according to the surrounding environment.
+The combination of these methods enables the robot to safely navigate while maintaining smooth motion and reacting intelligently to environmental changes.
 
 ---
 
-# Features
+# Key Features
 
-- Real-time robot localization using ArUco markers
-- Perspective transformation using homography
+- Hybrid navigation framework
 - Frenet-based trajectory tracking
 - Artificial Potential Field obstacle avoidance
-- Behavior-based decision making
-- State Machine controller
-- PID motion controller
-- WebSocket communication with ESP32
+- Behavior-based State Machine
+- Real-time ArUco localization
+- Homography-based coordinate transformation
 - Differential drive robot control
-- Live visualization using OpenCV
+- PID velocity controller
+- WebSocket communication with ESP32
+- Live OpenCV visualization
 
 ---
 
 # System Architecture
 
+<p align="center">
+<img src="Images/system_architecture.png" width="900">
+</p>
+
+The navigation framework consists of five main modules:
+
+1. Environment Perception
+2. Localization
+3. Decision Making
+4. Motion Planning
+5. Robot Control
+
+---
+
+# Algorithm Pipeline
+
 ```
 Camera
-      │
-      ▼
+│
+▼
 ArUco Detection
-      │
-      ▼
+│
+▼
 Homography Transformation
-      │
-      ▼
+│
+▼
 Robot Localization
-      │
-      ▼
-Environment Perception
-      │
-      ▼
+│
+▼
+Obstacle Detection
+│
+▼
 Finite State Machine
-      │
-      ├──────────────┐
-      │              │
-      ▼              ▼
-Frenet Planner     APF Planner
-      │              │
-      └──────┬───────┘
-             ▼
-      PID Controller
-             ▼
-      WebSocket Client
-             ▼
-          ESP32
-             ▼
- Differential Drive Robot
+│
+├─────────────┐
+│ │
+▼ ▼
+Frenet Planner APF Planner
+│ │
+└──────┬──────┘
+▼
+PID Controller
+▼
+WebSocket Client
+▼
+ESP32
+▼
+Differential Drive Robot
 ```
 
 ---
 
 # Navigation Strategy
 
-The navigation framework consists of three major layers.
+The navigation system consists of three complementary layers.
 
-## 1. Perception
+---
 
-The perception module is responsible for:
+## 1. Environment Perception
+
+The perception module is responsible for
 
 - Detecting ArUco markers
 - Estimating robot pose
-- Transforming image coordinates into world coordinates
-- Detecting obstacles
-- Extracting lane boundaries
+- Perspective transformation using homography
+- Obstacle detection
+- Lane extraction
+- Heading estimation
 
 ---
 
 ## 2. Decision Making
 
-A finite state machine determines the robot behavior.
+A behavior-based finite state machine determines the robot behavior.
 
-Available states include:
+The controller dynamically switches between different navigation modes.
+
+Available states include
 
 - KEEP
 - STOP
 - CHANGE_LEFT
 - CHANGE_RIGHT
 
-The state machine continuously evaluates the environment and switches between behaviors according to obstacle positions and lane availability.
+Each state is selected according to obstacle positions and lane availability.
 
 ---
 
 ## 3. Motion Planning
 
-The motion planner combines two complementary methods.
+The proposed navigation framework combines two planning methods.
 
 ### Frenet Planner
 
-The Frenet planner is responsible for smooth trajectory tracking while the path ahead is clear.
+The Frenet planner generates smooth trajectories while the road ahead is clear.
+
+It minimizes steering oscillation and provides stable lane tracking.
+
+---
 
 ### Artificial Potential Field
 
-Whenever an obstacle is detected, the planner generates a repulsive force to safely avoid collisions.
+When an obstacle is detected, the Artificial Potential Field planner produces repulsive forces to avoid collisions while preserving forward motion.
 
-The controller switches dynamically between these strategies according to the current state.
+---
+
+### Hybrid Controller
+
+The finite state machine continuously determines which planner should be active.
+
+This allows the robot to switch seamlessly between
+
+- Smooth path tracking
+- Reactive obstacle avoidance
+
+without interrupting robot motion.
 
 ---
 
@@ -135,50 +182,38 @@ The controller switches dynamically between these strategies according to the cu
 
 Robot localization is achieved using computer vision.
 
-The localization pipeline consists of:
+The localization pipeline consists of
 
-1. Camera image acquisition
-2. ArUco marker detection
-3. Homography transformation
-4. Pose estimation
-5. Heading calculation
+- ArUco marker detection
+- Perspective transformation
+- Pose estimation
+- Heading estimation
+- World coordinate conversion
 
-This provides real-time robot position in the workspace coordinate system.
+This approach provides real-time robot position estimation without requiring wheel odometry.
 
 ---
 
-# Control
+# Control System
 
 Robot motion is controlled using PID controllers.
 
-The controller computes:
+The controller computes
 
 - Linear velocity
 - Angular velocity
 
-These commands are transmitted to the ESP32 via WebSocket communication.
+These commands are transmitted to the ESP32 using WebSocket communication.
 
 ---
 
-# Communication
-
-The software communicates with the robot using:
-
-- WebSocket
-- JSON messages
-- ESP32 microcontroller
-
-This enables low-latency real-time control.
-
----
-
-# Technologies
+# Software Stack
 
 - Python
 - OpenCV
 - NumPy
-- ESP32
 - WebSocket
+- ESP32
 - ArUco
 - PID Control
 - Frenet Planning
@@ -189,43 +224,94 @@ This enables low-latency real-time control.
 # Project Structure
 
 ```
-Hybrid-Autonomous-Navigation/
-
+Hybrid-Autonomous-Navigation
 │
 ├── README.md
 ├── LICENSE
 ├── requirements.txt
+├── .gitignore
 │
-├── Demo/
-│      Demo5.mp4
+├── Demo
+│ ├── Demo5.mp4
+│ └── Demo5.gif
 │
-├── Images/
+├── Images
+│ ├── system_architecture.png
+│ ├── robot_setup.jpg
+│ ├── aruco_detection.png
+│ ├── localization.png
+│ └── trajectory.png
 │
-├── src/
-│      Frenet6.py
+├── src
+│ └── Frenet6.py
 │
-└── docs/
+└── docs
 ```
 
 ---
 
-# Future Improvements
+# Installation
 
-- Dynamic obstacle prediction
-- Multi-robot cooperation
-- ROS2 implementation
-- LiDAR integration
-- Model Predictive Control (MPC)
-- Reinforcement Learning based behavior selection
+Clone the repository
+
+```bash
+git clone https://github.com/USERNAME/Hybrid-Autonomous-Navigation.git
+```
+
+Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+Run
+
+```bash
+python src/Frenet6.py
+```
 
 ---
 
-# Citation
+# Results
 
-If you use this project in your research, please cite it appropriately.
+The proposed framework successfully combines
+
+- Smooth trajectory tracking
+- Behavior-based navigation
+- Real-time obstacle avoidance
+- Stable differential-drive control
+
+The hybrid architecture demonstrates robust navigation performance in structured environments.
+
+---
+
+# Future Work
+
+- ROS2 implementation
+- Dynamic obstacle prediction
+- MPC controller
+- LiDAR integration
+- Multi-robot cooperation
+- Reinforcement Learning behavior selection
+
+---
+
+# Author
+
+**Setayesh Khasehtarash**
+
+M.Sc. Student in Automation and Control Engineering
+
+Interested in
+
+- Robotics
+- Autonomous Navigation
+- Computer Vision
+- Intelligent Control
+- Path Planning
 
 ---
 
 # License
 
-This project is released under the MIT License.
+This project is licensed under the MIT License.
