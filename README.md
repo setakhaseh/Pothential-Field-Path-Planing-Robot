@@ -16,11 +16,7 @@ Hybrid Autonomous Navigation for Differential Drive Robots
 ```
 Demo/
 └── Demo5.mp4
-```
 
-*(You can replace this section with a GIF generated from Demo5 for a better GitHub presentation.)*
-
----
 
 # Overview
 
