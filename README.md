@@ -1,8 +1,8 @@
 <div align="center">
 
-# Hybrid Autonomous Navigation for Differential Drive Robots
+# Autonomous Navigation for Differential Drive Robots
 
-### A Hybrid Navigation Framework Combining Frenet Path Planning, Artificial Potential Field, and Finite State Machine
+### A Navigation Framework Combining Frenet Path Planning, Artificial Potential Field, and Finite State Machine
 
 ![Python](https://img.shields.io/badge/Python-3.x-blue)
 ![OpenCV](https://img.shields.io/badge/OpenCV-4.x-green)
@@ -221,55 +221,58 @@ These commands are transmitted to the ESP32 using WebSocket communication.
 
 ---
 
-# Project Structure
-
-```
-Hybrid-Autonomous-Navigation
-│
-├── README.md
-├── LICENSE
-├── requirements.txt
-├── .gitignore
-│
-├── Demo
-│ ├── Demo5.mp4
-│ └── Demo5.gif
-│
-├── Images
-│ ├── system_architecture.png
-│ ├── robot_setup.jpg
-│ ├── aruco_detection.png
-│ ├── localization.png
-│ └── trajectory.png
-│
-├── src
-│ └── Frenet6.py
-│
-└── docs
-```
-
----
 
 # Installation
 
-Clone the repository
 
-```bash
-git clone https://github.com/USERNAME/Hybrid-Autonomous-Navigation.git
+## Prerequisites
+
+Before running the project, make sure you have:
+
+- Python 3.x
+- OpenCV
+- ESP32 development board
+- USB camera
+- A local Wi-Fi network
+
+---
+
+## Setup
+
+### 1. Configure the ESP32 firmware
+
+The repository includes a sample Arduino firmware:
+
+```
+RobotArduino.ino
 ```
 
-Install dependencies
+Modify the firmware according to your own robot hardware (e.g., motor pins, encoder configuration, PID parameters, and network settings), then upload it to your ESP32 using the Arduino IDE.
+
+---
+
+### 2. Connect all devices to the same Wi-Fi network
+
+Ensure that both the **ESP32 robot** and the **computer running the navigation software** are connected to the same Wi-Fi network. This enables real-time communication via WebSocket.
+
+---
+
+### 3. Run the navigation framework
+
+Execute the main navigation program:
 
 ```bash
-pip install -r requirements.txt
+python src/Robot.py
 ```
 
-Run
+The software will:
 
-```bash
-python src/Frenet6.py
-```
-
+- Detect ArUco markers
+- Estimate the robot pose
+- Perform path planning
+- Generate motion commands
+- Send velocity commands to the ESP32 via WebSocket
+- Navigate the robot autonomously
 ---
 
 # Results
