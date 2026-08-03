@@ -93,13 +93,13 @@ Obstacle Detection
 ▼
 Finite State Machine
 │
-├─────────────┐
-│ │
-▼ ▼
+├───────────────┐
+│               │
+▼               ▼
 Frenet Planner APF Planner
-│ │
-└──────┬──────┘
-▼
+│               │
+└──────┬────────┘
+       ▼
 PID Controller
 ▼
 WebSocket Client
