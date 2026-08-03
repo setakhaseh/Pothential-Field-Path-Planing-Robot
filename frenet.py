@@ -5,6 +5,9 @@ import socket
 import keyboard
 import time
 import math
+import numpy as np
+
+
 
 # ================= UDP (ESP32) =================
 ESP32_IP = "172.20.10.9"
@@ -18,6 +21,13 @@ def send(msg):
     except Exception as e:
         print(f"UDP Error: {e}")
 
+def wrap_to_pi(angle):
+    return (angle + np.pi) % (2 * np.pi) - np.pi
+
+def heading_error(xr, yr, phi_r, xt, yt):
+    desired_heading = np.arctan2(yt - yr, xt - xr)
+    e_theta = wrap_to_pi(desired_heading - phi_r)
+    return e_theta
 # ================= ArUco Setup =================
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
 parameters = aruco.DetectorParameters()
@@ -36,7 +46,6 @@ SEND_INTERVAL = 0.05
 last_send_time = 0
 robot_started = False
 traj_d = None
-traj_idx = 0
 current_s, current_d, current_yaw = 0, 0, 0
 H_last = None
 
@@ -50,21 +59,17 @@ def handle_keys(e):
         target_lane = int(e.name)
         d1 = lane_centers[target_lane] - x_ref_center
         # تولید مسیر از موقعیت فعلی
-        s_traj = np.linspace(current_s, current_s + 2.0, 50)
-        traj_d = frenet_lane_change(current_d, d1, current_s + 0.2, s_traj)
-        traj_idx = 0
-        if not robot_started:
-            send("0")
-            robot_started = True
+        # s_traj = np.linspace(current_s, current_s + 2.0, 50)
+        # traj_d = frenet_lane_change(current_d, d1, current_s + 0.2, s_traj)
+        # traj_idx = 0
+        # if not robot_started:
+        #     send("0")
+        robot_started = True
         print(f"Target Lane: {target_lane}")
     elif e.name == "4" or e.name == "s":
         send("4")
         robot_started = False
-        traj_d = None
         print("STOP")
-    else:
-        robot_started=False
-        send("4")
                 
 
 keyboard.on_press(handle_keys)
@@ -109,12 +114,17 @@ try:
                 head_g = pts_ground[1][0]
                 current_yaw = np.degrees(np.arctan2(head_g[1]-y, head_g[0]-x))
                 current_s, current_d = y, x - x_ref_center
+                x_target = x
 
-                # مدیریت دنبال کردن مسیر
-                x_target = x 
+                if robot_started:
+                    d1 = lane_centers[target_lane] - x_ref_center
+                    s_traj = np.linspace(current_s, current_s + 2.0, 50)
+                    traj_d = frenet_lane_change(current_d, d1, current_s + 0.2, s_traj)
+                # # مدیریت دنبال کردن مسیر
+                # x_target = x 
                 if robot_started and traj_d is not None:
-                    if traj_idx < len(traj_d):
-                        d_target = traj_d[traj_idx]
+                        LOOKAHEAD_IDX = 5
+                        d_target = traj_d[min(LOOKAHEAD_IDX, len(traj_d)-1)]
                         x_target = d_target + x_ref_center
                         
                         # رسم مسیر روی تصویر (تبدیل معکوس از زمین به پیکسل)
@@ -133,11 +143,6 @@ try:
                             for pt in img_pts_back:
                                 cv2.circle(frame, (int(pt[0]), int(pt[1])), 3, (0, 0, 255), -1)
 
-                        # منطق پیشروی در مسیر
-                        if abs(x - x_target) < ARRIVAL_THRESHOLD:
-                            traj_idx += 1
-                    else:
-                        send("4")
 
                 # ارسال داده به ESP32
                 now = time.time()
