@@ -288,16 +288,6 @@ The hybrid architecture demonstrates robust navigation performance in structured
 
 ---
 
-# Future Work
-
-- ROS2 implementation
-- Dynamic obstacle prediction
-- MPC controller
-- LiDAR integration
-- Multi-robot cooperation
-- Reinforcement Learning behavior selection
-
----
 
 # Author
 
