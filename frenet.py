@@ -1,12 +1,15 @@
 import cv2
 import cv2.aruco as aruco
 import numpy as np
-import socket
 import keyboard
 import time
 import math
 import numpy as np
 import time
+from frenetplanner import FrenetPlanner
+import websocket
+import json
+import threading
 
 
 
@@ -16,22 +19,7 @@ import time
 # sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 # sock.settimeout(0.01)
 # ================= WebSocket (ESP32) =================
-import csv
 
-# ========= Logging =========
-LOG_FILE = "vw_log.csv"
-log_file = open(LOG_FILE, "w", newline="")
-log_writer = csv.writer(log_file)
-
-# header مخصوص MATLAB
-log_writer.writerow([
-    "t",
-    "x",
-    "y",
-    "theta",
-    "v_cmd",
-    "w_cmd"
-])
 
 # ========= State memory =========
 x_prev, y_prev, phi_prev = None, None, None
@@ -43,14 +31,9 @@ v_filt = 0.0
 w_filt = 0.0
 
 t0 = time.time()
-
-import websocket
-import json
-import threading
-
+# ================= UDP (ESP32) =================
 ESP32_IP = "172.20.10.9"
 WS_URL = f"ws://{ESP32_IP}:80/"
-
 ws = None
 ws_connected = False
 
@@ -127,7 +110,6 @@ def heading_error(xr, yr, phi_r, xt, yt):
     global desired_heading
     desired_heading = np.arctan2(yt - yr, xt - xr)
     e_theta = wrap_to_pi(desired_heading - phi_r)
-    e_theta=round(e_theta,2)
     return e_theta
 
 #===================PID SETUP====================
@@ -136,6 +118,8 @@ pid_v = PID(Kp=1, Ki=0.1, Kd=0.01, out_min=0, out_max=0.6)  # m/s
 pid_w = PID(Kp=4, Ki=0.0, Kd=0.6, out_min=-2.0, out_max=2.0)  # rad/s
 v_cmd_base=0.4
 v_cmd, w_cmd, w_cmd_prev = 0.0, 0.0, 0.0
+x_target = 0.4
+y_target = 1.0
 
 
 
@@ -150,43 +134,52 @@ ROBOT_ID = 21
 lane_centers = {1:0.29, 2:0.73, 3:1.17}
 x_ref_center = lane_centers[2]
 target_lane = 2
-
-
 ARRIVAL_THRESHOLD = 0.1
 #pre{0.05}
 SEND_INTERVAL = 0.02
 last_send_time = 0
 robot_started = False
-traj_d = None
-current_s, current_d, current_yaw = 0, 0, 0
 H_last = None
-stopp=None
+stopp=False
+planner_initialized = False
 phi_r=0
+ego_s_estimate ,ego_d_estimate=0,0
+need_reset = False
 #preKs=8.2(OK)
-def frenet_lane_change(d0, d1, s0, s_points, k=8.2):
-    return d0 + (d1-d0)*(1+np.tanh(k*(s_points-s0)))/2
+
 def stop():
+    global stopp
+    stopp=True
     send(0.0, 0.0)
 
 # ================= Keyboard Events =================
 def handle_keys(e):
-    global traj_d, traj_idx, robot_started, x_ref_center,target_lane,stopp
+    global robot_started, target_lane, planner, stopp, ego_s_estimate, ego_d_estimate, x_ref_center, need_reset, planner_initialized
+
     if e.name in ["1", "2", "3"]:
         target_lane = int(e.name)
-        d1 = lane_centers[target_lane] - x_ref_center
-        # تولید مسیر از موقعیت فعلی
-        # s_traj = np.linspace(current_s, current_s + 2.0, 50)
-        # traj_d = frenet_lane_change(current_d, d1, current_s + 0.2, s_traj)
-        # traj_idx = 0
-        # if not robot_started:
-        #     send("0")
-        robot_started = True
+        x_center = lane_centers[target_lane]
+        x_ref_center = lane_centers[target_lane]
         print(f"Target Lane: {target_lane}")
-    elif e.name == "4" or e.name == "s":
-        stopp=True
+
+        # مسیر جدید بساز
+        global_route = [[x_center, y, np.pi/2] for y in np.linspace(-1.0, 5.0, 100)]
+        need_reset=True
+        robot_started=True
+
+
+    elif e.name in ["4", "s"]:
+        stopp = True
         stop()
         robot_started = False
         print("STOP")
+def estimate_current_lane(d):
+    if d < -0.22:
+        return 1
+    elif d > 0.22:
+        return 3
+    else:
+        return 2
 
                 
 
@@ -198,6 +191,17 @@ print("▶ System Ready. Press 1, 2, 3 to start/change lane. '4' to Stop. 'Q' to
 last_time = time.time()  # قبل از while True
 
 try:
+    planner = FrenetPlanner()
+
+    # Global reference path (lane center)
+    global_route = []
+    for y in np.linspace(0, 50.0, 500):
+        global_route.append([x_ref_center, y, np.pi/2])
+
+
+    planner.start(global_route)
+    # planner.reset(s=0.0, d=0.0)
+    path = None  # قبل از while True
     while True:
         
         ret, frame = cap.read()
@@ -221,6 +225,7 @@ try:
                 H_last, _ = cv2.findHomography(np.array(image_points), np.array(world_points))
 
             if H_last is not None and ROBOT_ID in ids:
+    
                 idx = np.where(ids==ROBOT_ID)[0][0]
                 robot_corners = corners[idx][0]
                 center_img = np.mean(robot_corners, axis=0)
@@ -231,75 +236,94 @@ try:
                 pts_ground = cv2.perspectiveTransform(pts, H_last)
 
                 x, y = float(pts_ground[0][0][0]), float(pts_ground[0][0][1])
+                if need_reset:
+                        print(f"attemting reset x={x:.2f} y={y:.2f}")
+                        print(f"global r :{global_route[0]} to {global_route[-1]}")
+                        try:
+                            planner.start(global_route)
+                            s0 = float(y)
+                            d0 = float(x - x_ref_center)
+                            planner.reset(s=s0, d=d0)
+                            # یکبار مسیر اولیه بساز
+                            path, _ = planner.run_step(
+                                ego_state=[x, y, 0, 0, phi_r, [[0,0],[0,0]], 10.0],
+                                idx=0,
+                                change_lane=0,
+                                target_speed=0.35
+                            )
+                            planner_initialized = True
+                            need_reset = False
+                            print(f"reset at s={s0:.2f} and d={d0:.2f}")
+                            print("✅ Planner initialized and path ready")
+                        except Exception as e:
+                            print(f"⚠ Planner reset failed: {e}")
+                # --- Frenet state estimation (for straight reference path) ---
+                ego_s_estimate = max(ego_s_estimate, 0.9 * ego_s_estimate + 0.1 * y)
+                alpha = 0.7
+                ego_d_estimate = alpha * ego_d_estimate + (1 - alpha) * (x - x_ref_center)
                 head_g = pts_ground[1][0]
                 current_yaw = np.degrees(np.arctan2(head_g[1]-y, head_g[0]-x))
-                phi_r = np.radians(current_yaw)
+                phi_r = wrap_to_pi(np.radians(current_yaw))
+                current_lane = estimate_current_lane(ego_d_estimate)
+                change_lane = target_lane - current_lane
+                now_t = time.time()
+                dt = max(now_t - last_time, 0.001)
+                last_time = now_t
 
-                current_s, current_d = y, x - x_ref_center
-                x_target = x
-                y_target=y
-                t_now = time.time()
-                t_rel = t_now - t0
+                if x_prev is not None:
+                    v_filt = math.hypot(x - x_prev, y - y_prev) / dt
+                else:
+                    v_filt = 0.0
+                x_prev, y_prev = x, y
+                ego_state = [
+                                x,              # x position
+                                y,              # y position
+                                v_filt,         # speed
+                                0.0,            # acceleration (set 0 if unknown)
+                                phi_r,          # yaw
+                                [[0, 0], [0, 0]],  # velocity & acceleration vectors (dummy)
+                                10.0            # track length (any large value)
+                            ]
 
-                if t_prev is not None:
-                            dt = t_now - t_prev
-
-                            if dt > 1e-4:
-                                # ===== Measured velocities =====
-                                dx = x - x_prev
-                                dy = y - y_prev
-                                dphi = (phi_r - phi_prev + math.pi) % (2*math.pi) - math.pi
-
-
-                                v_meas = math.sqrt(dx*dx + dy*dy) / dt
-                                w_meas = dphi / dt
-
-                                # ===== Low-pass filter =====
-                                alpha = math.exp(-2 * math.pi * V_CUTOFF * dt)
-                                v_filt = alpha * v_filt + (1 - alpha) * v_meas
-                                w_filt = alpha * w_filt + (1 - alpha) * w_meas
-
-                                # ===== Log =====
-                                if robot_started:
-                                    log_writer.writerow([
-                                    t_rel,
-                                    x,
-                                    y,
-                                    phi_r,
-                                    v_cmd,
-                                    w_cmd          
-                                ])
-                                
-
-                        # ===== Update memory =====
-                x_prev, y_prev, phi_prev = x, y, phi_r        
-                t_prev = t_now
-
-                if robot_started:
-                    d1 = lane_centers[target_lane] - x_ref_center
-                    S_FORWARD = 0.08  # مسیر کمی جلوتر از ربات شروع شود
-                    s_traj = np.linspace(current_s + S_FORWARD, current_s + 2 + S_FORWARD, 50)
-                    traj_d = frenet_lane_change(current_d, d1, current_s + 0.2 + S_FORWARD, s_traj)
-
-
+                # if robot_started:
+                #     pass
                 # # مدیریت دنبال کردن مسیر
                 # x_target = x 
-                if robot_started and traj_d is not None:
-                        
+                if path is not None and len(path.x)>0:
+                        LOOKAHEAD_DIST = 0.15  # meter
+                        dist = 0.0
+                        target_idx = 0
+                        for i in range(1, len(path.x)):
+                            dist += math.hypot(
+                                path.x[i] - path.x[i-1],
+                                path.y[i] - path.y[i-1]
+                            )
+                            if dist >= LOOKAHEAD_DIST:
+                                target_idx = i
+                                break
 
-                        #look aheads=3cm(slow),5(slow),8(better)
-                        LOOKAHEAD_IDX = 0.2
-                        # پیدا کردن نزدیک‌ترین نقطه جلوتر از current_s
-                        idx_la = np.searchsorted(s_traj, current_s + LOOKAHEAD_IDX)  # 5cm جلوتر
-                        idx_la = min(idx_la, len(traj_d)-1)
-                        d_target = traj_d[idx_la]
-                        x_target = d_target + x_ref_center
-                        y_target = s_traj[idx_la]
+                if robot_started and planner_initialized:
+                    if planner.path is None:
+                        path, _ = planner.run_step(
+                            ego_state=ego_state,
+                            idx=0,
+                            change_lane=change_lane,
+                            target_speed=0.35
+                        )
+                    if planner.path is not None:
+                        path, _ = planner.run_step(
+                            ego_state=ego_state,
+                            idx=0,
+                            change_lane=change_lane,
+                            target_speed=0.35
+                        )
+                    
+
+                        x_target = path.x[target_idx]
+                        y_target = path.y[target_idx]
 
 
                         e_theta = heading_error(x, y, phi_r, x_target, y_target)
-                        dt = max(time.time() - last_time, 0.001)
-                        last_time = time.time()
                         error_pos=math.hypot(x_target - x, y_target - y)
                         # v_cmd = pid_v.update(error_pos, dt)
                         v_base = 0.35
@@ -311,7 +335,7 @@ try:
                             w_base= -0.2
 
                         if abs(e_theta) > np.deg2rad(5):
-                            w_cmd = w_cmd + math.copysign(0.2,w_cmd )
+                            w_cmd += 0.2 * np.tanh(5 * e_theta)
                         else:
                             w_cmd = 0.7 * w_cmd_prev + 0.3 * w_cmd + w_base
                             w_cmd_prev = w_cmd
@@ -323,31 +347,34 @@ try:
                         # رسم مسیر روی تصویر (تبدیل معکوس از زمین به پیکسل)
                         H_inv = np.linalg.inv(H_last)
                         # برای رسم مسیر روی تصویر
-                        S_FORWARD = 0.08  # مسیر کمی جلوتر از ربات شروع شود
-                        s_traj_v = np.linspace(current_s + S_FORWARD, current_s + 2 + S_FORWARD, 30)
-                        d_traj_v = frenet_lane_change(current_d, d1, current_s + 0.2 + S_FORWARD, s_traj)
-
+                        # رسم مسیر روی تصویر (تبدیل معکوس از زمین به پیکسل)
+                        H_inv = np.linalg.inv(H_last)
                         points_to_draw = []
-                        for i_v in range(len(s_traj_v)):
-                            gx, gy = d_traj_v[i_v] + x_ref_center, s_traj_v[i_v]
-                            points_to_draw.append([gx, gy])
-                        
-                        if len(points_to_draw) > 0:
-                            pts_to_img = np.array([points_to_draw], dtype="float32")
-                            img_pts_back = cv2.perspectiveTransform(pts_to_img, H_inv)[0]
-                            for pt in img_pts_back:
-                                cv2.circle(frame, (int(pt[0]), int(pt[1])), 3, (0, 0, 255), -1)
 
+                        # برداشتن نقاط مسیر برای رسم (هر 3 نقطه یکبار)
+                        for i in range(0, len(path.x), 3):
+                            points_to_draw.append([path.x[i], path.y[i]])
+
+                        # تبدیل مختصات مسیر از زمین به تصویر
+                        if len(points_to_draw) > 0:
+                            pts_to_img = cv2.perspectiveTransform(
+                                np.array([points_to_draw], dtype="float32"),
+                                H_inv
+                            )[0]
+
+                            # رسم نقاط مسیر روی تصویر
+                            for pt in pts_to_img:
+                                cv2.circle(frame, (int(pt[0]), int(pt[1])), 3, (0, 0, 255), -1)
+                    else:
+                        print("⚠ Planner path is None! Can't run_step yet.")
 
                 # ارسال داده به ESP32
                 now = time.time()
-                if  stopp:
-                    send(0, 0)
-
-                    
+                if not robot_started or stopp or not planner_initialized:
+                    send(0.0, 0.0)
                 elif now - last_send_time > SEND_INTERVAL:
-                        send(v_cmd, w_cmd)
-                        last_send_time = time.time()
+                    send(v_cmd, w_cmd)
+                    last_send_time = now
 
                 # نمایش اطلاعات
                 aruco.drawDetectedMarkers(frame, corners)
@@ -368,9 +395,7 @@ try:
             break
 
 finally:
-    log_file.close()
-    print("Log saved to", LOG_FILE)
+
 
     cap.release()
     cv2.destroyAllWindows()
-    socket.close()
