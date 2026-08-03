@@ -17,8 +17,8 @@
 # Demo
 
 <p align="center">
-<a href="Demo/Demo5.mp4">
-<img src="Demo/Demo5.gif" width="900">
+<a href="Demos/Demo5.mp4">
+<img src="Demos/Demo5.gif" width="900">
 </a>
 </p>
 
