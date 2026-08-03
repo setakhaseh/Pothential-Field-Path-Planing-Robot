@@ -60,7 +60,7 @@ The combination of these methods enables the robot to safely navigate while main
 # System Architecture
 
 <p align="center">
-<img src="Images/system_architecture.png" width="900">
+<img src="system_architecture.png" width="900">
 </p>
 
 The navigation framework consists of five main modules:
